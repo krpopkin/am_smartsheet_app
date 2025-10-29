@@ -83,7 +83,8 @@ with sync_playwright() as p:
         
         # Create folder and save file
         today = datetime.now()
-        folder_name = f"am_program_status_{today.year}_{today.month:02d}_{today.day:02d}"
+        #folder_name = f"am_program_status_{today.year}_{today.month:02d}_{today.day:02d}"
+        folder_name = f"am_program_plan"
         filename = f"am_program_plan_{today.year}_{today.month:02d}_{today.day:02d}.xlsx"
         
         base_path = "/mnt/c/Users/krpop/Amway Corp/Global Account Management Community - Workspace Core Team - Workspace Core Team/Program Status"
