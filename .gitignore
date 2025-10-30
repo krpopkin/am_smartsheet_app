@@ -71,3 +71,4 @@ Thumbs.db
 # Node (from Reflex frontend)
 node_modules/
 .next/.states/
+.states/
