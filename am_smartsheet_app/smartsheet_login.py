@@ -1,15 +1,21 @@
 from playwright.sync_api import sync_playwright
 import time
-from datetime import datetime
 import os
+import json
 
 def main():
-    # This version uses keyboard navigation which is often more reliable than hover
-
+    """
+    Log into Smartsheet and save the browser session state.
+    If a valid session already exists, it will verify and reuse it.
+    """
+    
     email = "ken.popkin@amway.com"
     password = "Smartsheet1!"
     sheet_url = "https://app.smartsheet.com/sheets/HCh3Jrfcx25f8mvJP8pGCVxg834CfR6W5xqWV781?view=grid"
-
+    
+    # Path to store browser session state
+    session_file = "/mnt/c/Users/krpop/.smartsheet_session.json"
+    
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False,
@@ -25,93 +31,96 @@ def main():
         page = context.new_page()
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
         
-        try:
-            # Login
-            #print("Logging in...")
-            page.goto("https://app.smartsheet.com/b/login", wait_until="domcontentloaded")
-            page.fill('#loginEmail', email)
-            page.click('#formControl')
-            time.sleep(2)
+        # Check if we have a saved session
+        if os.path.exists(session_file):
+            print("Found existing session, checking if still valid...")
             
-            if page.locator("text='Sign in with email and password'").count() > 0:
-                page.click("text='Sign in with email and password'")
-                time.sleep(2)
-            
-            page.fill('#loginPassword', password)
-            page.click('#formControl')
-            time.sleep(5)
-            
-            # Go to sheet
-            #print("Going to sheet...")
-            page.goto(sheet_url, wait_until="domcontentloaded")
-            time.sleep(4)
-            
-            #print("\nExporting using keyboard navigation...")
-            
-            # Click File menu
-            #print("  Opening File menu...")
-            page.click('text=File')
-            time.sleep(1)
-            
-            # Navigate to Export using Down arrow (9 times based on manual testing)
-            #print("  Navigating to Export...")
-            for i in range(9):
-                page.keyboard.press('ArrowDown')
-                time.sleep(0.2)
-            
-            # Press Right arrow to open Export submenu
-            #print("  Opening Export submenu...")
-            page.keyboard.press('ArrowRight')
-            time.sleep(1)
-            
-            # Navigate to "Export to Microsoft Excel" using Down arrow (5 times)
-            #print("  Navigating to Export to Microsoft Excel...")
-            for i in range(5):
-                page.keyboard.press('ArrowDown')
-                time.sleep(0.2)
-            
-            # Press Enter to select
-            #print("  Selecting Export to Microsoft Excel...")
-            page.keyboard.press('Enter')
-            time.sleep(1)
-            
-            # Wait for download
-            #print("  Waiting for download...")
-            with page.expect_download(timeout=30000) as download_info:
-                pass
-            
-            download = download_info.value
-            
-            # Create folder and save file
-            today = datetime.now()
-            #folder_name = f"am_program_status_{today.year}_{today.month:02d}_{today.day:02d}"
-            folder_name = f"am_program_plan"
-            filename = f"am_program_plan_{today.year}_{today.month:02d}_{today.day:02d}.xlsx"
-            
-            base_path = "/mnt/c/Users/krpop/Amway Corp/Global Account Management Community - Workspace Core Team - Workspace Core Team/Program Status"
-            folder_path = f"{base_path}/{folder_name}"
-            
-            # Create the folder if it doesn't exist
-            #print(f"  Creating folder: {folder_name}")
-            os.makedirs(folder_path, exist_ok=True)
-            
-            # Full path with folder and filename
-            downloads_path = f"{folder_path}/{filename}"
-            
-            #print(f"  Saving as: {filename}")
-            download.save_as(downloads_path)
-            
-            print(f"\n✓ Success! File saved to: {downloads_path}")
-            
-            time.sleep(10)
-            #print("\nClosing browser...")
-            
-        except Exception as e:
-            print(f"\n!!! ERROR: {e}")
-            time.sleep(30)
+            try:
+                # Load saved cookies
+                with open(session_file, 'r') as f:
+                    cookies = json.load(f)
+                
+                # Add cookies to context
+                context.add_cookies(cookies)
+                
+                # Test if session is still valid
+                page.goto(sheet_url, wait_until="domcontentloaded")
+                time.sleep(3)
+                
+                # Check if we're still logged in or got redirected to login
+                if "login" in page.url.lower() or page.locator("#loginEmail").count() > 0:
+                    print("Session expired, logging in fresh...")
+                    perform_login(page, email, password, sheet_url)
+                    # Save new session
+                    cookies = context.cookies()
+                    with open(session_file, 'w') as f:
+                        json.dump(cookies, f)
+                    print("✓ New session saved!")
+                else:
+                    print("✓ Session is still valid! No need to login again.")
+                    
+            except Exception as e:
+                print(f"Error checking session: {e}")
+                print("Logging in fresh...")
+                perform_login(page, email, password, sheet_url)
+                # Save new session
+                cookies = context.cookies()
+                with open(session_file, 'w') as f:
+                    json.dump(cookies, f)
+                print("✓ New session saved!")
+        else:
+            print("No existing session found, logging in...")
+            perform_login(page, email, password, sheet_url)
+            # Save session
+            cookies = context.cookies()
+            with open(session_file, 'w') as f:
+                json.dump(cookies, f)
+            print("✓ Session saved!")
         
+        time.sleep(2)
         browser.close()
-        print("Done!")
+    
+    print("Login process complete!")
+
+
+def perform_login(page, email, password, sheet_url):
+    """
+    Perform fresh login.
+    """
+    
+    try:
+        # Login
+        #print("  Navigating to login page...")
+        page.goto("https://app.smartsheet.com/b/login", wait_until="domcontentloaded")
+        page.fill('#loginEmail', email)
+        page.click('#formControl')
+        time.sleep(2)
         
+        if page.locator("text='Sign in with email and password'").count() > 0:
+            #print("  Selecting email/password login...")
+            page.click("text='Sign in with email and password'")
+            time.sleep(2)
+        
+        print("  Entering password...")
+        page.fill('#loginPassword', password)
+        page.click('#formControl')
+        time.sleep(5)
+        
+        # Navigate to the sheet to verify login worked
+        #print("  Navigating to sheet...")
+        page.goto(sheet_url, wait_until="domcontentloaded")
+        time.sleep(3)
+        
+        # Verify we're actually on the sheet
+        if "login" in page.url.lower():
+            raise Exception("Login failed - still on login page")
+        
+        print("✓ Successfully logged in!")
+        
+    except Exception as e:
+        print(f"!!! Login ERROR: {e}")
+        raise
+
+
 if __name__ == '__main__':
     main()

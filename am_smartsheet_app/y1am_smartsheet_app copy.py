@@ -1,6 +1,5 @@
 import reflex as rx
 from . import smartsheet_login
-from . import download_program_plan
 from . import create_wip_report
 import sys
 from io import StringIO
@@ -35,7 +34,7 @@ class State(rx.State):
             # Redirect stdout to collector
             sys.stdout = OutputCapture(original_stdout, output_collector)
             
-            # Run smartsheet_login in executor (checks/refreshes session)
+            # Run smartsheet_login in executor (since it's synchronous)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, smartsheet_login.main)
             
@@ -44,15 +43,7 @@ class State(rx.State):
                 async with self:
                     self.output_lines = list(output_collector)
             
-            # Run download_program_plan in executor (downloads Excel file)
-            await loop.run_in_executor(None, download_program_plan.main)
-            
-            # Update UI with collected output so far
-            if output_collector:
-                async with self:
-                    self.output_lines = list(output_collector)
-            
-            # Run create_wip_report in executor (processes the downloaded file)
+            # Run create_wip_report in executor
             await loop.run_in_executor(None, create_wip_report.main)
             
             # Update UI with all collected output

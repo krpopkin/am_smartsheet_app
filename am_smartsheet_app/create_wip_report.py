@@ -11,7 +11,7 @@ from openpyxl.utils import get_column_letter
 from datetime import datetime, timedelta
 import os
 
-def create_wip_report(input_file, output_file):
+def create_wip_report(input_file, output_file, output_filename):
     """
     Create WIP report from program plan spreadsheet
     
@@ -39,9 +39,6 @@ def create_wip_report(input_file, output_file):
     # Calculate cutoff date (today + 1 day)
     cutoff_date = datetime.now() + timedelta(days=1)
     
-    # Add original row number as index (1-based to match Excel row numbering, +2 for header)
-    df['original_row'] = range(2, len(df) + 2)
-    
     # Apply filters
     #print("Applying filters...")
     filtered_df = df[
@@ -50,6 +47,10 @@ def create_wip_report(input_file, output_file):
         (df['Status'] != 'done') &
         (df['Start'] <= cutoff_date)
     ].copy()
+    
+    # Calculate key values (original row number - 1)
+    # Row numbers are 1-based, +2 for header, then -1 for key calculation = +1
+    key_values = [idx + 1 for idx in filtered_df.index]
     
     #print(f"Filtered {len(filtered_df)} rows from {len(df)} total rows")
     
@@ -61,7 +62,8 @@ def create_wip_report(input_file, output_file):
         'Owner': filtered_df['Owner'],
         'Start': filtered_df['Start'],
         'Finish': filtered_df['Finish'],
-        'Status Update': filtered_df['Status Update']
+        'Status Update': filtered_df['Status Update'],
+        'key': key_values
     })
     
     # Format date columns to mm-dd-yyyy before writing to Excel
@@ -109,10 +111,14 @@ def create_wip_report(input_file, output_file):
         'E': 12,  # Start
         'F': 12,  # Finish
         'G': 46,  # Status Update
+        'H': 10,  # key
     }
     
     for col, width in column_widths.items():
         ws.column_dimensions[col].width = width
+    
+    # Hide column H (key column)
+    ws.column_dimensions['H'].hidden = True
     
     # Create a copy of the sheet and name it "original"
     #print("Creating hidden 'original' sheet...")
@@ -122,7 +128,7 @@ def create_wip_report(input_file, output_file):
     
     # Save final workbook
     wb.save(output_file)
-    print(f"Report created successfully: {output_file}")
+    print(f"Report created successfully: {output_filename}")
     print(f"Total rows in report: {len(output_df)}")
 
 def main():
@@ -151,7 +157,7 @@ def main():
         return
     
     # Create the report
-    create_wip_report(input_file, output_file)
+    create_wip_report(input_file, output_file, output_filename)
 
 if __name__ == '__main__':
     main()
