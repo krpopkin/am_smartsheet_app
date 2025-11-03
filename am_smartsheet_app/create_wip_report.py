@@ -10,6 +10,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
 
 def create_wip_report(input_file, output_file, output_filename):
     """
@@ -133,12 +134,16 @@ def create_wip_report(input_file, output_file, output_filename):
 
 def main():
     """Main function to run the report generation"""
+    
+    load_dotenv()
+    
     # Get today's date
     today = datetime.now()
     
     # Define folder and file names
-    folder_name = f"am_program_plan"
-    filename = f"am_program_plan_{today.year}_{today.month:02d}_{today.day:02d}.xlsx"
+    smartsheet_name = os.getenv("SMARTSHEET_PROJECT_NAME")
+    folder_name = f"{smartsheet_name}_program_plan"
+    filename = f"{smartsheet_name}_program_plan_{today.year}_{today.month:02d}_{today.day:02d}.xlsx"
     
     base_path = "/mnt/c/Users/krpop/Amway Corp/Global Account Management Community - Workspace Core Team - Workspace Core Team/Program Status"
     folder_path = f"{base_path}/{folder_name}"
@@ -147,7 +152,7 @@ def main():
     input_file = f"{folder_path}/{filename}"
     
     # Output file in the same folder with matching format
-    output_filename = f"am_program_wip_{today.year}_{today.month:02d}_{today.day:02d}.xlsx"
+    output_filename = f"{smartsheet_name}_program_wip_{today.year}_{today.month:02d}_{today.day:02d}.xlsx"
     output_file = f"{folder_path}/{output_filename}"
     
     # Check if input file exists

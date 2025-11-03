@@ -1,14 +1,16 @@
 import reflex as rx
 from . import smartsheet_login
+from . import download_program_plan
 from . import create_wip_report
 import sys
-from io import StringIO
 import asyncio
+import os
+from dotenv import load_dotenv
 
 
 class State(rx.State):
     """The app state."""
-    current_content: str = "Hello World"
+    current_content: str = " "
     output_lines: list[str] = []
     is_running: bool = False
 
@@ -24,34 +26,37 @@ class State(rx.State):
             self.output_lines = []
             self.is_running = True
         
-        # Create a list to collect output
         output_collector = []
-        
-        # Create output capture
         original_stdout = sys.stdout
+        playwright_instance = None
+        browser = None
         
         try:
-            # Redirect stdout to collector
+            # Load .env file
+            load_dotenv()
+            
             sys.stdout = OutputCapture(original_stdout, output_collector)
             
-            # Run smartsheet_login in executor (since it's synchronous)
+            # Step 1: Login and get browser session (already async, no executor needed)
+            p, browser, context, page = await smartsheet_login.main()
+            playwright_instance = p
+            
+            async with self:
+                self.output_lines = list(output_collector)
+            
+            # Step 2: Download program plan using the same browser session (already async)
+            await download_program_plan.main(page)
+            
+            async with self:
+                self.output_lines = list(output_collector)
+            
+            # Step 3: Create WIP report (sync function, use executor)
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, smartsheet_login.main)
-            
-            # Update UI with collected output so far
-            if output_collector:
-                async with self:
-                    self.output_lines = list(output_collector)
-            
-            # Run create_wip_report in executor
             await loop.run_in_executor(None, create_wip_report.main)
             
-            # Update UI with all collected output
-            if output_collector:
-                async with self:
-                    self.output_lines = list(output_collector)
+            async with self:
+                self.output_lines = list(output_collector)
             
-            # Update final status
             async with self:
                 self.current_content = "WIP report - Completed!"
                 self.is_running = False
@@ -62,8 +67,12 @@ class State(rx.State):
                 self.current_content = "WIP report - Error occurred"
                 self.is_running = False
         finally:
-            # Restore stdout
             sys.stdout = original_stdout
+            # Clean up browser resources (now async)
+            if browser:
+                await browser.close()
+            if playwright_instance:
+                await playwright_instance.stop()
 
     def show_update_ss(self):
         """Update content to Update SS."""
@@ -81,7 +90,7 @@ class OutputCapture:
     
     def write(self, text):
         """Write to both the original stdout and collect the output."""
-        if text.strip():  # Only add non-empty lines
+        if text.strip():
             self.collector.append(text.rstrip())
         self.original_stdout.write(text)
         return len(text)
@@ -95,41 +104,21 @@ def index() -> rx.Component:
     """The main page."""
     return rx.container(
         rx.vstack(
-            # Tab buttons
+            rx.heading("Smartsheet App", size="8"),
             rx.hstack(
-                rx.button(
-                    "WIP report",
-                    on_click=State.show_wip_report,
-                    size="3",
-                    disabled=State.is_running,
-                ),
-                rx.button(
-                    "Update SS",
-                    on_click=State.show_update_ss,
-                    size="3",
-                    disabled=State.is_running,
-                ),
+                rx.button("WIP report", on_click=State.show_wip_report, size="3", disabled=State.is_running),
+                rx.button("Update SS", on_click=State.show_update_ss, size="3", disabled=State.is_running),
                 spacing="4",
                 padding_y="4",
             ),
-            # Status heading
-            rx.heading(
-                State.current_content,
-                size="8",
-            ),
-            # Output console area
+            rx.heading(State.current_content, size="6"),
             rx.cond(
                 State.output_lines.length() > 0,
                 rx.box(
                     rx.vstack(
                         rx.foreach(
                             State.output_lines,
-                            lambda line: rx.text(
-                                line,
-                                font_family="monospace",
-                                font_size="14px",
-                                white_space="pre-wrap",
-                            ),
+                            lambda line: rx.text(line, font_family="monospace", font_size="14px", white_space="pre-wrap"),
                         ),
                         spacing="1",
                         align="start",

@@ -1,121 +1,73 @@
-from playwright.sync_api import sync_playwright
-import time
+from playwright.async_api import async_playwright
+import asyncio
 import os
-import json
+from dotenv import load_dotenv
 
-def main():
+async def main():
     """
-    Log into Smartsheet and save the browser session state.
-    If a valid session already exists, it will verify and reuse it.
+    Log into Smartsheet and return the browser session objects.
+    Returns: tuple of (playwright, browser, context, page)
     """
+    load_dotenv()
     
     email = "ken.popkin@amway.com"
     password = "Smartsheet1!"
-    sheet_url = "https://app.smartsheet.com/sheets/HCh3Jrfcx25f8mvJP8pGCVxg834CfR6W5xqWV781?view=grid"
+    sheet_url = os.getenv("SMARTSHEET_PROJECT_URL")
     
-    # Path to store browser session state
-    session_file = "/mnt/c/Users/krpop/.smartsheet_session.json"
+    # Start Playwright async
+    p = await async_playwright().start()
     
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=False,
-            slow_mo=500,
-            args=['--disable-blink-features=AutomationControlled']
-        )
-        
-        context = browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        )
-        
-        page = context.new_page()
-        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
-        
-        # Check if we have a saved session
-        if os.path.exists(session_file):
-            print("Found existing session, checking if still valid...")
-            
-            try:
-                # Load saved cookies
-                with open(session_file, 'r') as f:
-                    cookies = json.load(f)
-                
-                # Add cookies to context
-                context.add_cookies(cookies)
-                
-                # Test if session is still valid
-                page.goto(sheet_url, wait_until="domcontentloaded")
-                time.sleep(3)
-                
-                # Check if we're still logged in or got redirected to login
-                if "login" in page.url.lower() or page.locator("#loginEmail").count() > 0:
-                    print("Session expired, logging in fresh...")
-                    perform_login(page, email, password, sheet_url)
-                    # Save new session
-                    cookies = context.cookies()
-                    with open(session_file, 'w') as f:
-                        json.dump(cookies, f)
-                    print("✓ New session saved!")
-                else:
-                    print("✓ Session is still valid! No need to login again.")
-                    
-            except Exception as e:
-                print(f"Error checking session: {e}")
-                print("Logging in fresh...")
-                perform_login(page, email, password, sheet_url)
-                # Save new session
-                cookies = context.cookies()
-                with open(session_file, 'w') as f:
-                    json.dump(cookies, f)
-                print("✓ New session saved!")
-        else:
-            print("No existing session found, logging in...")
-            perform_login(page, email, password, sheet_url)
-            # Save session
-            cookies = context.cookies()
-            with open(session_file, 'w') as f:
-                json.dump(cookies, f)
-            print("✓ Session saved!")
-        
-        time.sleep(2)
-        browser.close()
+    browser = await p.chromium.launch(
+        headless=False,
+        slow_mo=500,
+        args=['--disable-blink-features=AutomationControlled']
+    )
     
-    print("Login process complete!")
+    context = await browser.new_context(
+        viewport={'width': 1920, 'height': 1080},
+        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    )
+    
+    page = await context.new_page()
+    await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+    
+    print("Logging in...")
+    await perform_login(page, email, password, sheet_url)
+    
+    print("Login complete!")
+    
+    # Return all objects so they can be used by subsequent scripts
+    return p, browser, context, page
 
 
-def perform_login(page, email, password, sheet_url):
+async def perform_login(page, email, password, sheet_url):
     """
     Perform fresh login.
     """
     
     try:
-        # Login
-        #print("  Navigating to login page...")
-        page.goto("https://app.smartsheet.com/b/login", wait_until="domcontentloaded")
-        page.fill('#loginEmail', email)
-        page.click('#formControl')
-        time.sleep(2)
+        await page.goto("https://app.smartsheet.com/b/login", wait_until="domcontentloaded")
+        await asyncio.sleep(2)
         
-        if page.locator("text='Sign in with email and password'").count() > 0:
-            #print("  Selecting email/password login...")
-            page.click("text='Sign in with email and password'")
-            time.sleep(2)
+        await page.fill('#loginEmail', email)
+        await page.click('#formControl')
+        await asyncio.sleep(3)
         
-        print("  Entering password...")
-        page.fill('#loginPassword', password)
-        page.click('#formControl')
-        time.sleep(5)
+        if await page.locator("text='Sign in with email and password'").count() > 0:
+            await page.click("text='Sign in with email and password'")
+            await asyncio.sleep(2)
         
-        # Navigate to the sheet to verify login worked
-        #print("  Navigating to sheet...")
-        page.goto(sheet_url, wait_until="domcontentloaded")
-        time.sleep(3)
+        await page.fill('#loginPassword', password)
+        await page.click('#formControl')
+        await asyncio.sleep(5)
         
-        # Verify we're actually on the sheet
+        await page.goto(sheet_url, wait_until="domcontentloaded")
+        await asyncio.sleep(3)
+        
         if "login" in page.url.lower():
             raise Exception("Login failed - still on login page")
         
-        print("✓ Successfully logged in!")
+        #print("✓ Login successful!")
         
     except Exception as e:
         print(f"!!! Login ERROR: {e}")
@@ -123,4 +75,10 @@ def perform_login(page, email, password, sheet_url):
 
 
 if __name__ == '__main__':
-    main()
+    async def run():
+        p, browser, context, page = await main()
+        input("Press Enter to close browser...")
+        await browser.close()
+        await p.stop()
+    
+    asyncio.run(run())
