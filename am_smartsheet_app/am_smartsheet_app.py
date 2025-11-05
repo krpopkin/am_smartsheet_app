@@ -3,6 +3,8 @@ from . import smartsheet_login
 from . import download_program_plan
 from . import create_wip_report
 from . import identify_plan_changes
+from . import update_program_plan
+from . import update_program_plan_spreadsheet
 import sys
 import asyncio
 import os
@@ -81,24 +83,53 @@ class State(rx.State):
     
     @rx.event(background=True)
     async def run_update_ss(self):
-        """Run the Update SS (identify plan changes) as a background task."""
+        """Run the Update SS (identify changes, apply to spreadsheet, login, and update Smartsheet) as a background task."""
         async with self:
-            self.current_content = "Smartsheet update running..."
+            self.current_content = "Update SS - Running..."
             self.output_lines = []
             self.is_running = True
         
         output_collector = []
         original_stdout = sys.stdout
+        playwright_instance = None
+        browser = None
         
         try:
             sys.stdout = OutputCapture(original_stdout, output_collector)
             
-            # Run identify_plan_changes.main() (sync function, use executor)
+            # Step 1: Run identify_plan_changes.main() (sync function, use executor)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, identify_plan_changes.main)
             
             async with self:
                 self.output_lines = list(output_collector)
+            
+            # Step 2: Run update_program_plan_spreadsheet.main() (sync function, use executor)
+            await loop.run_in_executor(None, update_program_plan_spreadsheet.main)
+            
+            async with self:
+                self.output_lines = list(output_collector)
+            
+            # Step 3: Login to Smartsheet and get browser session
+            load_dotenv()
+            p, browser, context, page = await smartsheet_login.main()
+            playwright_instance = p
+            
+            async with self:
+                self.output_lines = list(output_collector)
+            
+            # Step 4: Update Smartsheet from the spreadsheet with changes
+            await update_program_plan.main(page)
+            
+            async with self:
+                self.output_lines = list(output_collector)
+            
+            # Step 5: Save changes (Ctrl+S)
+            await page.keyboard.press('Control+S')
+            await asyncio.sleep(2)  # Wait for save to complete
+            
+            async with self:
+                self.output_lines = [*output_collector, "Saved changes to Smartsheet"]
             
             async with self:
                 self.current_content = "Update SS - Completed!"
@@ -111,6 +142,11 @@ class State(rx.State):
                 self.is_running = False
         finally:
             sys.stdout = original_stdout
+            # Clean up browser resources
+            if browser:
+                await browser.close()
+            if playwright_instance:
+                await playwright_instance.stop()
 
 
 class OutputCapture:

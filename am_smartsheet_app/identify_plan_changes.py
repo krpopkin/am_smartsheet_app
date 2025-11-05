@@ -189,12 +189,11 @@ def compare_and_create_changes(file_path):
     # Freeze the top row
     ws_changes.freeze_panes = 'A2'
     
-    # Save the workbook
-    output_path = file_path.replace('.xlsx', '_with_changes.xlsx')
-    wb.save(output_path)
-    print(f"\nWorkbook with changes saved")
+    # Save the workbook to the same file (overwrite)
+    wb.save(file_path)
+    print(f"\nChanges tab added to workbook")
     
-    return output_path
+    return file_path
 
 
 def main():
