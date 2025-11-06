@@ -59,7 +59,7 @@ def create_wip_report(input_file, output_file, output_filename):
     output_df = pd.DataFrame({
         'Release': filtered_df['Release'],
         'Swimlane': filtered_df['Swimlane'],
-        'Primary': filtered_df['Task Name'],
+        'Primary': filtered_df['Primary'],
         'Owner': filtered_df['Owner'],
         'Start': filtered_df['Start'],
         'Finish': filtered_df['Finish'],

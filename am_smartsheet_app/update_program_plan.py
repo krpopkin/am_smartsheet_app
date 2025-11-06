@@ -102,18 +102,18 @@ async def update_smartsheet_from_excel(page, excel_file_path):
             
             # Move to next row
             await page.keyboard.press('Home')
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await page.keyboard.press('ArrowDown')
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
             
         else:
             # Skip non-milestone row
             # BUG FIX: Must go to column 1 first before moving down!
             # Otherwise we'll be misaligned on the next milestone row
             await page.keyboard.press('Home')
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             await page.keyboard.press('ArrowDown')
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
             rows_skipped += 1
     
     print(f"\n✓ Updated {milestone_rows_updated} milestone rows")
