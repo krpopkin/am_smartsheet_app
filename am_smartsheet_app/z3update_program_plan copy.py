@@ -7,7 +7,6 @@ import openpyxl
 import asyncio
 import os
 import glob
-import sys
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import pandas as pd 
@@ -45,8 +44,6 @@ async def update_smartsheet_from_excel(page, excel_file_path, changes_list):
     
     print("\nStarting row-by-row update...")
     
-    rows_updated = 0
-    
     # Loop through each data row in Excel (starting from row 2)
     for row_num in range(2, ws.max_row + 1):
         
@@ -82,8 +79,6 @@ async def update_smartsheet_from_excel(page, excel_file_path, changes_list):
                         await page.keyboard.press('Tab')
                         await asyncio.sleep(0.1)
                 
-                rows_updated += 1
-                
                 # Move to next row
                 await page.keyboard.press('Home')
                 await asyncio.sleep(0.5)
@@ -96,11 +91,13 @@ async def update_smartsheet_from_excel(page, excel_file_path, changes_list):
                 await asyncio.sleep(0.5)
                 await page.keyboard.press('ArrowDown')
                 await asyncio.sleep(0.5)
+                rows_skipped += 1
         
         else:
             break
-    
-    print(f"\n✓ Updated {rows_updated} rows")
+            
+    print(f"  Skipped {rows_skipped} non-milestone rows")
+    print(f"  Skipped {rows_skipped_done} milestone rows marked as 'done'")
     
     # Save the Smartsheet
     print("\nSaving Smartsheet...")
@@ -134,11 +131,10 @@ async def main(page):
             sys.exit(1)
         
         wip_file = max(wip_files, key=os.path.getmtime)
-        print(f"Using WIP file: {os.path.basename(wip_file)}")
+        #print(f"Using WIP file: {os.path.basename(wip_file)}")
         
         # Get list of rows changed from the WIP file
         changes_list = get_changes_from_wip(wip_file)
-        print(f"Rows to update: {changes_list}")
         
         # Find the most recent _with_updates.xlsx file
         pattern = os.path.join(folder_path, f"{smartsheet_name}_program_plan_*_with_updates.xlsx")
